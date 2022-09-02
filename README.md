@@ -11,4 +11,4 @@ pip3 install -r requirements.txt
 ```generate_image_text_features.py ./path_to_img_folder``` -> generates features  
 ```train.py``` -> trains index  
 ```add_to_index.py``` -> adds features from lmdb to index  (if ./trained.index is not found, defaults to Flat Index)  
-```generate_image_text_features.py``` -> web microservice  
+```image_text_features_web.py``` -> web microservice  
