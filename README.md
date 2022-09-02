@@ -1,7 +1,7 @@
 # image_text_features_web
 Faiss + Pytorch + FastAPI + LMDB <br>
 Uses CLIP ViT B/16, aQE <br>
-Supported operations: add new image, delete image, find similar images by image file, find similar images by image id <br>
+Supported operations: add new image, delete image,find similar images by text query, find similar images by image file, find similar images by image id <br>
 
 You should install torch yourself https://pytorch.org/get-started/locally/.  
 ```bash
