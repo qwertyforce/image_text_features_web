@@ -36,6 +36,7 @@ pca = None
 #         pca = pickle.load(pickle_file)
 app = FastAPI()
 _transform=transforms.Compose([
+                       transforms.Resize((224,224)),
                        transforms.ToTensor(),
                        transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))])
 
@@ -55,14 +56,14 @@ def init_index():
         exit()
 
 def transform(im):
-    desired_size = 224
-    old_size = im.size  # old_size[0] is in (width, height) format
-    ratio = float(desired_size)/max(old_size)
-    new_size = tuple([int(x*ratio) for x in old_size])
-    im = im.resize(new_size, Image.Resampling.LANCZOS)
-    new_im = Image.new("RGB", (desired_size, desired_size))
-    new_im.paste(im, ((desired_size-new_size[0])//2, (desired_size-new_size[1])//2))
-    return _transform(new_im)
+    # desired_size = 224
+    # old_size = im.size  # old_size[0] is in (width, height) format
+    # ratio = float(desired_size)/max(old_size)
+    # new_size = tuple([int(x*ratio) for x in old_size])
+    # im = im.resize(new_size, Image.Resampling.LANCZOS)
+    # new_im = Image.new("RGB", (desired_size, desired_size))
+    # new_im.paste(im, ((desired_size-new_size[0])//2, (desired_size-new_size[1])//2))
+    return _transform(im)
 
 def int_to_bytes(x: int) -> bytes:
     return x.to_bytes((x.bit_length() + 7) // 8, 'big')
