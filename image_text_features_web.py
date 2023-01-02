@@ -66,7 +66,7 @@ def transform(im):
     return _transform(im)
 
 def int_to_bytes(x: int) -> bytes:
-    return x.to_bytes((x.bit_length() + 7) // 8, 'big')
+    return x.to_bytes(4, 'big')
 
 def delete_descriptor_by_id(id):
     with DB_features.begin(write=True,buffers=True) as txn:
