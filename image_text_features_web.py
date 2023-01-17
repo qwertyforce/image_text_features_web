@@ -3,6 +3,18 @@ if __name__ == '__main__':
     uvicorn.run('image_text_features_web:app', host='127.0.0.1', port=33338, log_level="info")
     exit()
 
+from os import environ
+if not "GET_FILENAMES" in environ:
+    print("GET_FILENAMES not found! Defaulting to 0...")
+    GET_FILENAMES = 0
+else:
+    if environ["GET_FILENAMES"] not in ["0","1"]:
+        print("GET_FILENAMES has wrong argument! Defaulting to 0...")
+        GET_FILENAMES = 0
+    else:
+        GET_FILENAMES = int(environ["GET_FILENAMES"])
+
+import traceback
 from os.path import exists
 from typing import Optional, Union
 import torch
@@ -35,25 +47,22 @@ pca = None
 #     with open(pca_w_file, 'rb') as pickle_file:
 #         pca = pickle.load(pickle_file)
 app = FastAPI()
-_transform=transforms.Compose([
-                       transforms.Resize((224,224)),
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))])
 
 def main():
-    global DB_features
-    DB_features = lmdb.open('./features.lmdb',map_size=500*1_000_000) #5000mb
+    global DB_features, DB_filename_to_id, DB_id_to_filename
+    init_index()
+    DB_features = lmdb.open('./features.lmdb',map_size=5000*1_000_000) #5000mb
+    DB_filename_to_id = lmdb.open('./filename_to_id.lmdb',map_size=50*1_000_000) #50mb
+    DB_id_to_filename = lmdb.open('./id_to_filename.lmdb',map_size=50*1_000_000) #50mb
+
     init_index()
     loop = asyncio.get_event_loop()
     loop.call_later(10, periodically_save_index,loop)
 
-def init_index():
-    global index
-    if exists("./populated.index"):
-        index = faiss.read_index("./populated.index")
-    else:
-        print("Index is not found! Exiting...")
-        exit()
+_transform=transforms.Compose([
+                       transforms.Resize((224,224)),
+                       transforms.ToTensor(),
+                       transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))])
 
 def transform(im):
     # desired_size = 224
@@ -68,13 +77,47 @@ def transform(im):
 def int_to_bytes(x: int) -> bytes:
     return x.to_bytes(4, 'big')
 
-def delete_descriptor_by_id(id):
-    with DB_features.begin(write=True,buffers=True) as txn:
-        txn.delete(int_to_bytes(id))   #True = deleted False = not found
+def check_if_exists_by_image_id(image_id):
+    with DB_features.begin(buffers=True) as txn:
+        x = txn.get(int_to_bytes(image_id), default=False)
+        if x:
+            return True
+        return False
 
-def add_descriptor(id, features):
+def get_filenames_bulk(image_ids):
+    image_ids_bytes = [int_to_bytes(x) for x in image_ids]
+
+    with DB_id_to_filename.begin(buffers=False) as txn:
+        with txn.cursor() as curs:
+            file_names = curs.getmulti(image_ids_bytes)
+    for i in range(len(file_names)):
+        file_names[i] = file_names[i][1].decode()
+
+    return file_names
+
+def delete_descriptor_by_id(image_id):
+    image_id_bytes = int_to_bytes(image_id)
     with DB_features.begin(write=True, buffers=True) as txn:
-        txn.put(int_to_bytes(id), np.frombuffer(features,dtype=np.float32))
+        txn.delete(image_id_bytes)   #True = deleted False = not found
+
+    with DB_id_to_filename.begin(write=True, buffers=True) as txn:
+        file_name_bytes = txn.get(image_id_bytes, default=False)
+        txn.delete(image_id_bytes)  
+
+    with DB_filename_to_id.begin(write=True, buffers=True) as txn:
+        txn.delete(file_name_bytes) 
+
+def add_descriptor(image_id, features):
+    file_name_bytes = f"{image_id}.online".encode()
+    image_id_bytes = int_to_bytes(image_id)
+    with DB_features.begin(write=True, buffers=True) as txn:
+        txn.put(image_id_bytes, np.frombuffer(features, dtype=np.float32))
+
+    with DB_id_to_filename.begin(write=True, buffers=True) as txn:
+        txn.put(image_id_bytes, file_name_bytes)
+
+    with DB_filename_to_id.begin(write=True, buffers=True) as txn:
+        txn.put(file_name_bytes, image_id_bytes)
 
 def read_img_buffer(image_data):
     img = Image.open(io.BytesIO(image_data))
@@ -166,9 +209,14 @@ async def image_text_features_get_similar_images_by_id_handler(item: Item_image_
             raise HTTPException(status_code=500, detail="both k and distance_threshold present")
 
         target_features = index.reconstruct(item.image_id).reshape(1,-1)         
-        results = nn_find_similar(target_features, k, distance_threshold, aqe_n, aqe_alpha)
-        return results
-    except RuntimeError:
+        similar = nn_find_similar(target_features, k, distance_threshold, aqe_n, aqe_alpha)
+        if GET_FILENAMES:
+            file_names = get_filenames_bulk([el["image_id"] for el in similar])
+            for i in range(len(similar)):
+                similar[i]["file_name"] = file_names[i]
+        return similar
+    except:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="Error in image_text_features_get_similar_images_by_id")
 
 @app.post("/image_text_features_get_similar_images_by_image_buffer")
@@ -190,9 +238,14 @@ async def image_text_features_get_similar_images_by_image_buffer_handler(image: 
         # if pca:
         #     target_features=pca.transform(target_features)
         #     target_features/=np.linalg.norm(target_features)
-        results = nn_find_similar(target_features, k, distance_threshold, aqe_n, aqe_alpha)
-        return results
-    except RuntimeError:
+        similar = nn_find_similar(target_features, k, distance_threshold, aqe_n, aqe_alpha)
+        if GET_FILENAMES:
+            file_names = get_filenames_bulk([el["image_id"] for el in similar])
+            for i in range(len(similar)):
+                similar[i]["file_name"] = file_names[i]
+        return similar
+    except:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="Error in image_text_features_get_similar_images_by_image_buffer")
 
 @app.post("/image_text_features_get_similar_images_by_text")
@@ -214,16 +267,24 @@ async def image_text_features_get_similar_images_by_text_handler(item: Item_imag
             raise HTTPException(status_code=500, detail="both k and distance_threshold present")
 
         target_features = get_text_features(item.text)       
-        results = nn_find_similar(target_features, k, distance_threshold, aqe_n, aqe_alpha)
-        return results
-    except RuntimeError:
+        similar = nn_find_similar(target_features, k, distance_threshold, aqe_n, aqe_alpha)
+        if GET_FILENAMES:
+            file_names = get_filenames_bulk([el["image_id"] for el in similar])
+            for i in range(len(similar)):
+                similar[i]["file_name"] = file_names[i]
+        return similar
+    except:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="Error in image_text_features_get_similar_images_by_text")
 
 @app.post("/calculate_image_text_features")
 async def calculate_image_text_features_handler(image: bytes = File(...),image_id: str = Form(...)):
     try:
         global DATA_CHANGED_SINCE_LAST_SAVE
-        image_id=int(image_id)
+        image_id = int(image_id)
+        if check_if_exists_by_image_id(image_id):
+            return Response(content="Image with the same id is already in the db", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, media_type="text/plain")
+            
         features=get_features(image)
         add_descriptor(image_id, features.astype(np.float32))
         # if pca:
@@ -233,6 +294,7 @@ async def calculate_image_text_features_handler(image: bytes = File(...),image_i
         DATA_CHANGED_SINCE_LAST_SAVE = True
         return Response(status_code=status.HTTP_200_OK)
     except:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="Can't calculate global features")
 
 class Item_image_id(BaseModel):
@@ -242,16 +304,24 @@ class Item_image_id(BaseModel):
 async def delete_image_text_features_handler(item:Item_image_id):
     try:
         global DATA_CHANGED_SINCE_LAST_SAVE
-        delete_descriptor_by_id(item.image_id)
         res = index.remove_ids(np.int64([item.image_id]))
         if res != 0: 
+            delete_descriptor_by_id(item.image_id)
             DATA_CHANGED_SINCE_LAST_SAVE = True
         else: #nothing to delete
-            print(f"err: no image with id {item.image_id}")
+            print(f"err: no image with id {item.image_id}")    
         return Response(status_code=status.HTTP_200_OK)
     except:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="Can't delete global features")
 
+def init_index():
+    global index
+    if exists("./populated.index"):
+        index = faiss.read_index("./populated.index")
+    else:
+        print("Index is not found! Exiting...")
+        exit()
 
 def periodically_save_index(loop):
     global DATA_CHANGED_SINCE_LAST_SAVE, index
