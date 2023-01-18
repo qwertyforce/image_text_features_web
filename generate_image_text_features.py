@@ -72,7 +72,7 @@ if __name__ == '__main__': #entry point
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_workers', type=int, default=torch.multiprocessing.cpu_count())
     parser.add_argument('--prefetch_factor', type=int, default=4)
-    parser.add_argument('--use_int_filenames_as_id', type=int, default=0)
+    parser.add_argument('--use_int_filenames_as_id',choices=[0,1], type=int, default=0)
 
     args = parser.parse_args()
     IMAGE_PATH = args.image_path
