@@ -1,17 +1,7 @@
 from PIL import Image
-from torchvision import transforms
 from torch.utils.data import Dataset
 
-def int_from_bytes(xbytes: bytes) -> int:
-    return int.from_bytes(xbytes, 'big')
-
-def int_to_bytes(x: int) -> bytes:
-    return x.to_bytes(4, 'big')
-
-_transform=transforms.Compose([
-                       transforms.Resize((224,224)),
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))])
+from modules.transform_ops import transform
 
 def read_img_file(f):
     img = Image.open(f)
@@ -19,16 +9,6 @@ def read_img_file(f):
     if img.mode != 'RGB':
         img = img.convert('RGB')
     return img
-
-def transform2(image):
-    # desired_size = 224
-    # old_size = image.size  # old_size[0] is in (width, height) format
-    # ratio = float(desired_size)/max(old_size)
-    # new_size = tuple([int(x*ratio) for x in old_size])
-    # image = image.resize(new_size, Image.Resampling.LANCZOS)
-    # new_img = Image.new("RGB", (desired_size, desired_size))
-    # new_img.paste(image, ((desired_size-new_size[0])//2, (desired_size-new_size[1])//2))
-    return _transform(image)
 
 class InferenceDataset(Dataset):
         def __init__(self, images, IMAGE_PATH):
@@ -43,7 +23,7 @@ class InferenceDataset(Dataset):
             img_path = self.IMAGE_PATH+"/"+file_name
             try:
                 img = read_img_file(img_path)
-                img = transform2(img)
+                img = transform(img)
                 return (file_name, img)
             except Exception as e:
                 print(e)
@@ -59,14 +39,15 @@ def collate_wrapper(batch):
 
 if __name__ == '__main__': #entry point 
     import torch
-    import clip
     from os import listdir
     from tqdm import tqdm
-    import lmdb
     import argparse
-    import numpy as np
     torch.multiprocessing.set_start_method('spawn') # to avoid problems when trying to fork process where torch is imported (CUDA problems)
     
+    from modules.inference_ops import get_image_features, get_device
+    from modules.lmdb_ops import get_dbs
+    from modules.byte_ops import int_from_bytes, int_to_bytes 
+
     parser = argparse.ArgumentParser()
     parser.add_argument('image_path', type=str,nargs='?', default="./../test_images")
     parser.add_argument('--batch_size', type=int, default=64)
@@ -81,8 +62,8 @@ if __name__ == '__main__': #entry point
     PREFETCH_FACTOR = args.prefetch_factor  
     USE_INT_FILENAMES = args.use_int_filenames_as_id
 
-    DB_filename_to_id = lmdb.open('./filename_to_id.lmdb',map_size=50*1_000_000) #50mb
-    DB_id_to_filename = lmdb.open('./id_to_filename.lmdb',map_size=50*1_000_000) #50mb
+    DB_features, DB_filename_to_id, DB_id_to_filename = get_dbs()
+    device = get_device()
 
     if USE_INT_FILENAMES == 0:
         with DB_id_to_filename.begin(buffers=True) as txn:
@@ -91,14 +72,6 @@ if __name__ == '__main__': #entry point
                 x = curs.item()
                 SEQUENTIAL_GLOBAL_ID = int_from_bytes(x[0]) # zeros if id_to_filename.lmdb is empty
         SEQUENTIAL_GLOBAL_ID+=1
-
-    DB_features = lmdb.open('./features.lmdb',map_size=1200*1_000_000) #500mb
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"using {device}")
-    model, _ = clip.load("ViT-B/16", device=device)
-    # model = torch.jit.optimize_for_inference(torch.jit.script(model.eval()))
-    model.eval()
-    model.to(device)
 
     def check_if_exists_by_file_name(file_name):
         if USE_INT_FILENAMES:
@@ -126,13 +99,6 @@ if __name__ == '__main__': #entry point
 
     print(f"new images = {len(new_images)}")
 
-    def get_features(images):
-        with torch.no_grad():
-            feature_vector = model.encode_image(images)
-            feature_vector/=torch.linalg.norm(feature_vector,axis=1).reshape(-1,1)
-        feature_vector = feature_vector.cpu().numpy().astype(np.float32)
-        return feature_vector
-
     infer_images = InferenceDataset(new_images,IMAGE_PATH)
     dataloader = torch.utils.data.DataLoader(infer_images, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR, collate_fn=collate_wrapper)
 
@@ -141,7 +107,7 @@ if __name__ == '__main__': #entry point
         if len(file_names) == 0:
             continue
         images = torch.stack(images).to(device)
-        features = [feature.tobytes() for feature in get_features(images)]
+        features = [feature.tobytes() for feature in get_image_features(images)]
 
         file_name_to_id = []
         id_to_file_name = []   

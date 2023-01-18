@@ -17,28 +17,24 @@ else:
 import traceback
 from os.path import exists
 from typing import Optional, Union
-import torch
 from pydantic import BaseModel
 from fastapi import FastAPI, File,Form, HTTPException, Response, status
 import numpy as np
 import asyncio
 from PIL import Image
-import torch
-import clip
-from torchvision import transforms
 # from pathlib import Path
 import io
 import faiss
-import lmdb
 # import pickle
 
+from modules.byte_ops import int_to_bytes
+from modules.inference_ops import get_image_features, get_text_features, get_device
+from modules.transform_ops import transform
+from modules.lmdb_ops import get_dbs
+
 dim = 512
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"using {device}")
-model, _ = clip.load("ViT-B/16", device=device)
-# model = torch.jit.optimize_for_inference(torch.jit.script(model.eval()))
-model.eval()
-model.to(device)
+device = get_device()
+
 index = None
 DATA_CHANGED_SINCE_LAST_SAVE = False
 # pca_w_file = Path("./pca_w.pkl")
@@ -51,31 +47,11 @@ app = FastAPI()
 def main():
     global DB_features, DB_filename_to_id, DB_id_to_filename
     init_index()
-    DB_features = lmdb.open('./features.lmdb',map_size=5000*1_000_000) #5000mb
-    DB_filename_to_id = lmdb.open('./filename_to_id.lmdb',map_size=50*1_000_000) #50mb
-    DB_id_to_filename = lmdb.open('./id_to_filename.lmdb',map_size=50*1_000_000) #50mb
+    DB_features, DB_filename_to_id, DB_id_to_filename = get_dbs()
 
     init_index()
     loop = asyncio.get_event_loop()
     loop.call_later(10, periodically_save_index,loop)
-
-_transform=transforms.Compose([
-                       transforms.Resize((224,224)),
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))])
-
-def transform(im):
-    # desired_size = 224
-    # old_size = im.size  # old_size[0] is in (width, height) format
-    # ratio = float(desired_size)/max(old_size)
-    # new_size = tuple([int(x*ratio) for x in old_size])
-    # im = im.resize(new_size, Image.Resampling.LANCZOS)
-    # new_im = Image.new("RGB", (desired_size, desired_size))
-    # new_im.paste(im, ((desired_size-new_size[0])//2, (desired_size-new_size[1])//2))
-    return _transform(im)
-
-def int_to_bytes(x: int) -> bytes:
-    return x.to_bytes(4, 'big')
 
 def check_if_exists_by_image_id(image_id):
     with DB_features.begin(buffers=True) as txn:
@@ -129,17 +105,8 @@ def read_img_buffer(image_data):
 def get_features(image_buffer):
     image=read_img_buffer(image_buffer)
     image = transform(image).unsqueeze(0).to(device)
-    with torch.no_grad():
-        feature_vector = model.encode_image(image)
-        feature_vector/=torch.linalg.norm(feature_vector)
-    return feature_vector.cpu().numpy().astype(np.float32)
-
-def get_text_features(text):
-    text_tokenized = clip.tokenize([text]).to(device)
-    with torch.no_grad():
-        feature_vector = model.encode_text(text_tokenized)
-        feature_vector/=torch.linalg.norm(feature_vector)
-    return feature_vector.cpu().numpy().astype(np.float32)
+    feature_vector = get_image_features(image)
+    return feature_vector
 
 def get_aqe_vector(feature_vector, n, alpha):
     _, I = index.search(feature_vector, n)
