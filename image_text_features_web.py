@@ -87,7 +87,7 @@ def add_descriptor(image_id, features):
     file_name_bytes = f"{image_id}.online".encode()
     image_id_bytes = int_to_bytes(image_id)
     with DB_features.begin(write=True, buffers=True) as txn:
-        txn.put(image_id_bytes, np.frombuffer(features, dtype=np.float32))
+        txn.put(image_id_bytes, features.tobytes())
 
     with DB_id_to_filename.begin(write=True, buffers=True) as txn:
         txn.put(image_id_bytes, file_name_bytes)
