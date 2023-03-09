@@ -27,7 +27,7 @@ import io
 import faiss
 # import pickle
 
-from modules.byte_ops import int_to_bytes
+from modules.byte_ops import int_to_bytes, int_from_bytes
 from modules.inference_ops import get_image_features, get_text_features, get_device
 from modules.transform_ops import transform
 from modules.lmdb_ops import get_dbs
@@ -71,6 +71,13 @@ def get_filenames_bulk(image_ids):
 
     return file_names
 
+def get_image_id_by_filename(file_name):
+    with DB_filename_to_id.begin(buffers=True) as txn:
+        image_id = txn.get(file_name.encode(), default=False)
+        if not image_id:
+            return False
+        return int_from_bytes(image_id)
+    
 def delete_descriptor_by_id(image_id):
     image_id_bytes = int_to_bytes(image_id)
     with DB_features.begin(write=True, buffers=True) as txn:
@@ -262,25 +269,30 @@ async def calculate_image_text_features_handler(image: bytes = File(...),image_i
         return Response(status_code=status.HTTP_200_OK)
     except:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Can't calculate global features")
+        raise HTTPException(status_code=500, detail="Can't calculate image_text features")
 
-class Item_image_id(BaseModel):
-    image_id: int
+class Item_delete_image_text_features(BaseModel):
+    image_id: Union[int ,None] = None
+    file_name: Union[None,str] = None
 
 @app.post("/delete_image_text_features")
-async def delete_image_text_features_handler(item:Item_image_id):
+async def delete_image_text_features_handler(item:Item_delete_image_text_features):
     try:
         global DATA_CHANGED_SINCE_LAST_SAVE
-        res = index.remove_ids(np.int64([item.image_id]))
+        if item.file_name:
+            image_id = get_image_id_by_filename(item.file_name)
+        else:
+            image_id = item.image_id
+        res = index.remove_ids(np.int64([image_id]))
         if res != 0: 
-            delete_descriptor_by_id(item.image_id)
+            delete_descriptor_by_id(image_id)
             DATA_CHANGED_SINCE_LAST_SAVE = True
         else: #nothing to delete
-            print(f"err: no image with id {item.image_id}")    
+            print(f"err: no image with id {image_id}")    
         return Response(status_code=status.HTTP_200_OK)
     except:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Can't delete global features")
+        raise HTTPException(status_code=500, detail="Can't delete image_text features")
 
 def init_index():
     global index
