@@ -296,17 +296,21 @@ async def delete_image_text_features_handler(item:Item_delete_image_text_feature
 
 def init_index():
     global index
-    if exists("./populated.index"):
-        index = faiss.read_index("./populated.index")
+    if exists("./data/populated.index"):
+        index = faiss.read_index("./data/populated.index")
     else:
         print("Index is not found! Exiting...")
-        exit()
+        print("Creating empty index")
+        import subprocess
+        subprocess.call(['python3', 'add_to_index.py'])
+        subprocess.call(['python', 'add_to_index.py']) #one should exist
+        init_index()
 
 def periodically_save_index(loop):
     global DATA_CHANGED_SINCE_LAST_SAVE, index
     if DATA_CHANGED_SINCE_LAST_SAVE:
         DATA_CHANGED_SINCE_LAST_SAVE=False
-        faiss.write_index(index, "./populated.index")
+        faiss.write_index(index, "./data/populated.index")
     loop.call_later(10, periodically_save_index,loop)
 
 main()      

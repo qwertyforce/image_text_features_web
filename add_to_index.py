@@ -5,11 +5,11 @@ import lmdb
 import faiss
 # import pickle 
 
-DB_features = lmdb.open("features.lmdb", readonly=True)
+DB_features = lmdb.open("./data/features.lmdb", readonly=True)
 dim = 512
 faiss_dim = dim
-if Path("./trained.index").is_file():
-    index = faiss.read_index("./trained.index")
+if Path("./data/trained.index").is_file():
+    index = faiss.read_index("./data/trained.index")
 else:
     quantizer = faiss.IndexFlat(faiss_dim, faiss.METRIC_L2)
     index = faiss.IndexIDMap2(quantizer)
@@ -57,4 +57,4 @@ def get_all_data_iterator(batch_size=10000):
 
 for ids, features in tqdm(get_all_data_iterator(100_000)):
     index.add_with_ids(features,ids)
-faiss.write_index(index,"populated.index")
+faiss.write_index(index,"./data/populated.index")

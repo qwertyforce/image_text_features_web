@@ -6,7 +6,7 @@ import faiss
 from os import remove
 
 dim = 512
-DB_descriptors = lmdb.open("features.lmdb", readonly=True)
+DB_descriptors = lmdb.open("./data/features.lmdb", readonly=True)
 entries = DB_descriptors.stat()['entries']
 nlist = int(math.sqrt(entries))
 print(f"entries = {entries}")
@@ -41,4 +41,4 @@ try:
     remove("train.mmap")
 except:
     pass    
-faiss.write_index(index,"./trained.index")
+faiss.write_index(index,"./data/trained.index")
