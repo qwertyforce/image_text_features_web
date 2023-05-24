@@ -1,6 +1,6 @@
 import uvicorn
 if __name__ == '__main__':
-    uvicorn.run('image_text_features_web:app', host='127.0.0.1', port=33338, log_level="info")
+    uvicorn.run('image_text_features_web:app', host='0.0.0.0', port=33338, log_level="info")
     exit()
 
 from os import environ
