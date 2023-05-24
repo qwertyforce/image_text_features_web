@@ -12,3 +12,13 @@ pip3 install -r requirements.txt
 ```train.py``` -> trains index  
 ```add_to_index.py``` -> adds features from lmdb to index  (if ./trained.index is not found, defaults to Flat Index)  
 ```image_text_features_web.py``` -> web microservice  
+
+
+Docker:  
+in main directory:  
+build image -   
+```docker build -t qwertyforce/image_text_features_web:1.0.0 --network host -t qwertyforce/image_text_features_web:latest ./```   
+run interactively -    
+```docker run -ti --rm -p 127.0.0.1:33338:33338  --mount type=bind,source="$(pwd)"/data,target=/app/data --name image_text_features_web qwertyforce/image_text_features_web:1.0.0```   
+run as daemon    
+```docker run -d --rm -p 127.0.0.1:33338:33338  --mount type=bind,source="$(pwd)"/data,target=/app/data --name image_text_features_web qwertyforce/image_text_features_web:1.0.0```     
