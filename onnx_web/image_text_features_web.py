@@ -28,12 +28,11 @@ import faiss
 # import pickle
 
 from modules.byte_ops import int_to_bytes, int_from_bytes
-from modules.inference_ops import get_image_features, get_text_features, get_device
+from modules.inference_ops import get_image_features, get_text_features
 from modules.transform_ops import transform
 from modules.lmdb_ops import get_dbs
 
 dim = 512
-device = get_device()
 
 index = None
 DATA_CHANGED_SINCE_LAST_SAVE = False
@@ -111,7 +110,7 @@ def read_img_buffer(image_data):
 
 def get_features(image_buffer):
     image=read_img_buffer(image_buffer)
-    image = transform(image).unsqueeze(0).to(device)
+    image = transform(image)
     feature_vector = get_image_features(image)
     return feature_vector
 
@@ -302,14 +301,7 @@ def init_index():
         print("Index is not found!")
         print("Creating empty index")
         import subprocess
-        try:
-            subprocess.call(['python3', 'add_to_index.py'])
-        except:
-            pass
-        try:                                                 #one of these should exist
-            subprocess.call(['python', 'add_to_index.py']) 
-        except:
-            pass
+        subprocess.call(['python3', 'add_to_index.py'])
         init_index()
 
 def periodically_save_index(loop):
