@@ -9,11 +9,15 @@ pip3 install -r requirements.txt
 ```
 
 ```generate_image_text_features.py ./path_to_img_folder``` -> generates features  
+```--use_int_filenames_as_id=0``` - images get sequential ids  
+```--use_int_filenames_as_id=1``` - image id is parsed from filename ("123.jpg" -> 123)   
+
 ```train.py``` -> trains index  
 ```add_to_index.py``` -> adds features from lmdb to index  (if ./trained.index is not found, defaults to Flat Index)  
 ```image_text_features_web.py``` -> web microservice  
-
-Docker (w onnx, web inference only):  
+```GET_FILENAMES=1 image_text_features_web.py``` -> when searching, include filename in search results  
+  
+Docker (onnx, web inference only):  
   in ./onnx_web:  
   download clip_textual.onnx and clip_visual.onnx from [here](https://github.com/qwertyforce/image_text_features_web/releases/tag/clip_models_0)  
   build image -   
