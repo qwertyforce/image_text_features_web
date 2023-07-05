@@ -18,20 +18,21 @@ pip3 install -r requirements.txt
 ```GET_FILENAMES=1 image_text_features_web.py``` -> when searching, include filename in search results  
   
 Docker (onnx, web inference only):  
-  in ./onnx_web:  
+  cd to ./onnx_web:  
   download clip_textual.onnx and clip_visual.onnx from [here](https://github.com/qwertyforce/image_text_features_web/releases/tag/clip_models_0)  
   build image -   
   ```docker build -t qwertyforce/onnx_image_text_features_web:1.0.0 --network host -t qwertyforce/onnx_image_text_features_web:latest ./```   
+  cd to main directory    
   run interactively -    
-  ```docker run -ti --rm -p 127.0.0.1:33338:33338  --mount type=bind,source="$(pwd)"/data,target=/app/data --name onnx_image_text_features_web qwertyforce/onnx_image_text_features_web:1.0.0```   
+  ```docker run -ti --rm -p 127.0.0.1:33338:33338 --network=ambience_net --mount type=bind,source="$(pwd)"/data,target=/app/data --name onnx_image_text_features_web qwertyforce/onnx_image_text_features_web:1.0.0```   
   run as daemon    
-  ```docker run -d --rm -p 127.0.0.1:33338:33338  --mount type=bind,source="$(pwd)"/data,target=/app/data --name onnx_image_text_features_web qwertyforce/onnx_image_text_features_web:1.0.0```     
+  ```docker run -d --rm -p 127.0.0.1:33338:33338 --network=ambience_net --mount type=bind,source="$(pwd)"/data,target=/app/data --name onnx_image_text_features_web qwertyforce/onnx_image_text_features_web:1.0.0```     
   
 Docker (w pytorch):  
   in main directory:  
   build image -   
   ```docker build -t qwertyforce/image_text_features_web:1.0.0 --network host -t qwertyforce/image_text_features_web:latest ./```   
   run interactively -    
-  ```docker run -ti --rm -p 127.0.0.1:33338:33338  --mount type=bind,source="$(pwd)"/data,target=/app/data --name image_text_features_web qwertyforce/image_text_features_web:1.0.0```   
+  ```docker run -ti --rm -p 127.0.0.1:33338:33338 --network=ambience_net --mount type=bind,source="$(pwd)"/data,target=/app/data --name image_text_features_web qwertyforce/image_text_features_web:1.0.0```   
   run as daemon    
-  ```docker run -d --rm -p 127.0.0.1:33338:33338  --mount type=bind,source="$(pwd)"/data,target=/app/data --name image_text_features_web qwertyforce/image_text_features_web:1.0.0```     
+  ```docker run -d --rm -p 127.0.0.1:33338:33338 --network=ambience_net --mount type=bind,source="$(pwd)"/data,target=/app/data --name image_text_features_web qwertyforce/image_text_features_web:1.0.0```     
